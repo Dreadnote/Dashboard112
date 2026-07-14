@@ -1,0 +1,229 @@
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0a0f1a; color: #e0e0e0; padding: 20px; }
+        .dashboard { max-width: 1440px; margin: 0 auto; }
+        
+        /* Статус-бар */
+        .status-bar {
+        background: #141e2b;
+        padding: 18px 30px;
+        border-radius: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        border-left: 6px solid #4ade80;
+        transition: all 0.5s ease;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .status-bar.warning { border-left-color: #facc15; box-shadow: 0 4px 30px rgba(250,204,21,0.15); }
+        .status-bar.danger { border-left-color: #f87171; box-shadow: 0 4px 30px rgba(248,113,113,0.25); animation: pulse-border 1.5s infinite; }
+        .status-bar.critical { border-left-color: #ef4444; box-shadow: 0 4px 30px rgba(239,68,68,0.4); animation: pulse-border 0.8s infinite; }
+        
+        @keyframes pulse-border {
+        0%, 100% { border-left-color: #ef4444; }
+        50% { border-left-color: #7f1d1d; }
+        }
+        
+        .coeff-big { font-size: 44px; font-weight: bold; letter-spacing: -1px; }
+        .coeff-big span { font-size: 18px; font-weight: normal; color: #94a3b8; }
+        .status-label { font-size: 16px; padding: 6px 20px; border-radius: 30px; background: #1e2a3a; }
+        
+        /* Сетка */
+        .grid-main {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+        }
+        .card {
+        background: #141e2b;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .card h3 { 
+        margin-bottom: 15px; 
+        color: #94a3b8; 
+        font-weight: 400; 
+        letter-spacing: 0.5px;
+        font-size: 16px;
+        text-transform: uppercase;
+        }
+        .card h3 i { margin-right: 10px; }
+        
+        /* График */
+        .chart-wrapper { position: relative; height: 300px; }
+        
+        /* Таблица */
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { text-align: left; color: #94a3b8; font-weight: 400; padding: 8px 0; border-bottom: 1px solid #1e2a3a; }
+        td { padding: 10px 0; border-bottom: 1px solid #1a2533; }
+        .badge { 
+        padding: 4px 14px; 
+        border-radius: 20px; 
+        font-size: 12px; 
+        font-weight: 600;
+        display: inline-block;
+        }
+        .badge.green { background: #064e3b; color: #86efac; }
+        .badge.yellow { background: #78350f; color: #fde047; }
+        .badge.orange { background: #7c2d12; color: #fdba74; }
+        .badge.red { background: #7f1d1d; color: #fca5a5; }
+        .badge.critical { background: #450a0a; color: #f87171; animation: blink 1s infinite; }
+        
+        @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+        }
+        
+        /* Карта */
+        .map-wrapper {
+        position: relative;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #1e2a3a;
+        background: #0a0f1a;
+        }
+        #map { 
+        height: 320px; 
+        width: 100%;
+        background: #0a0f1a;
+        transition: height 0.4s ease;
+        }
+        #map.fullscreen {
+        height: 70vh;
+        }
+        
+        /* Контролы карты (заменяем стандартные) */
+        .map-controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        display: flex;
+        gap: 8px;
+        }
+        .map-controls button {
+        background: rgba(20, 30, 43, 0.85);
+        border: 1px solid #2a3a4a;
+        color: #c0d0e0;
+        padding: 8px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        }
+        .map-controls button:hover {
+        background: #1e2a3a;
+        border-color: #60a5fa;
+        }
+        .map-controls button.active {
+        border-color: #60a5fa;
+        background: #1a2a3a;
+        }
+        
+        /* Легенда */
+        .legend-inline { 
+        display: flex; 
+        gap: 20px; 
+        flex-wrap: wrap; 
+        margin-top: 15px; 
+        font-size: 13px;
+        padding-top: 12px;
+        border-top: 1px solid #1e2a3a;
+        }
+        .legend-dot {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: middle;
+        }
+        
+        /* Кнопки сценариев */
+        .scenario-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 20px;
+        flex-wrap: wrap;
+        }
+        .scenario-buttons button {
+        padding: 12px 28px;
+        background: #1a2533;
+        border: 2px solid #2a3a4a;
+        color: #c0d0e0;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        }
+        .scenario-buttons button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+        }
+        .scenario-buttons button.normal { border-color: #4ade80; }
+        .scenario-buttons button.normal:hover { background: #064e3b; color: #86efac; }
+        .scenario-buttons button.emergency { border-color: #f87171; }
+        .scenario-buttons button.emergency:hover { background: #7f1d1d; color: #fca5a5; }
+        .scenario-buttons button.critical { border-color: #ef4444; }
+        .scenario-buttons button.critical:hover { background: #450a0a; color: #f87171; }
+        .scenario-buttons button.comms_fail { border-color: #fb923c; }
+        .scenario-buttons button.comms_fail:hover { background: #7c2d12; color: #fdba74; }
+        
+        /* Баннер ЧС */
+        .alert-banner {
+        background: #7f1d1d;
+        padding: 12px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: none;
+        font-weight: 600;
+        border: 1px solid #f87171;
+        }
+        .alert-banner.show { display: block; }
+        
+        /* Стили для кастомных пинов Яндекс.Карт */
+        .ymaps-custom-pin {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        }
+        .ymaps-custom-pin .pin-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        border: 2px solid rgba(255,255,255,0.2);
+        margin-bottom: 6px;
+        }
+        .ymaps-custom-pin .pin-shadow {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 10px solid;
+        }
+        
+        /* Адаптив */
+        @media (max-width: 900px) {
+        .grid-main { grid-template-columns: 1fr; }
+        }

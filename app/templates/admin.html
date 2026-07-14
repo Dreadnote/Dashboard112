@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Администрирование — Система-112</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0a0f1a; color: #e0e0e0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #1e2a3a;
+            margin-bottom: 30px;
+        }
+        .header a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        .header a:hover { text-decoration: underline; }
+        
+        .card {
+            background: #141e2b;
+            border-radius: 14px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .card h2 {
+            margin-bottom: 15px;
+            color: #94a3b8;
+            font-weight: 400;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .card h2 i { margin-right: 10px; }
+        
+        .upload-area {
+            border: 2px dashed #2a3a4a;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #60a5fa;
+            background: rgba(96, 165, 250, 0.05);
+        }
+        .upload-area.dragover {
+            border-color: #60a5fa;
+            background: rgba(96, 165, 250, 0.1);
+        }
+        .upload-area i { font-size: 48px; color: #60a5fa; margin-bottom: 15px; }
+        .upload-area p { color: #94a3b8; }
+        .upload-area .hint { font-size: 13px; color: #64748b; margin-top: 10px; }
+        
+        #fileInput { display: none; }
+        
+        /* Прогресс-бар с деталями */
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-container.show { display: block; }
+        
+        .progress-bar-wrapper {
+            width: 100%;
+            height: 20px;
+            background: #1e2a3a;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar-wrapper .fill {
+            height: 100%;
+            background: linear-gradient(90deg, #22c55e, #60a5fa);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            width: 0%;
+            position: relative;
+        }
+        .progress-bar-wrapper .fill.indeterminate {
+            width: 30%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(400%); }
+        }
+        
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 14px;
+            color: #94a3b8;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .progress-info .status-text { color: #e0e0e0; }
+        .progress-info .counts { font-family: 'Courier New', monospace; color: #60a5fa; }
+        
+        .log-area {
+            background: #0a0f1a;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: 15px;
+            display: none;
+        }
+        .log-area .success { color: #86efac; }
+        .log-area .error { color: #f87171; }
+        .log-area .info { color: #60a5fa; }
+        
+        .btn {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: #1a2533;
+            border: 2px solid #60a5fa;
+            color: #60a5fa;
+        }
+        .btn-primary:hover {
+            background: #60a5fa;
+            color: #0a0f1a;
+        }
+        .btn-danger {
+            background: #7f1d1d;
+            border: 2px solid #f87171;
+            color: #fca5a5;
+        }
+        .btn-danger:hover {
+            background: #f87171;
+            color: #0a0f1a;
+        }
+        .btn-success {
+            background: #064e3b;
+            border: 2px solid #86efac;
+            color: #86efac;
+        }
+        .btn-success:hover {
+            background: #86efac;
+            color: #0a0f1a;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .stat-item {
+            background: #0a0f1a;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-item .number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #e0e0e0;
+        }
+        .stat-item .label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+        
+        .upload-history {
+            margin-top: 15px;
+        }
+        .upload-history table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .upload-history th {
+            text-align: left;
+            color: #94a3b8;
+            padding: 8px 0;
+            border-bottom: 1px solid #1e2a3a;
+        }
+        .upload-history td {
+            padding: 8px 0;
+            border-bottom: 1px solid #1a2533;
+        }
+        .badge {
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .badge.green { background: #064e3b; color: #86efac; }
+        .badge.orange { background: #7c2d12; color: #fdba74; }
+        .badge.red { background: #7f1d1d; color: #fca5a5; }
+        
+        .alert {
+            padding: 12px 18px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .alert.show { display: block; }
+        .alert.success { background: #064e3b; color: #86efac; border: 1px solid #86efac; }
+        .alert.error { background: #7f1d1d; color: #fca5a5; border: 1px solid #f87171; }
+        .alert.info { background: #1a2a3a; color: #60a5fa; border: 1px solid #60a5fa; }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1><i class="fas fa-database"></i> Управление данными</h1>
+        <a href="/"><i class="fas fa-arrow-left"></i> На дашборд</a>
+    </div>
+
+    <!-- Уведомления -->
+    <div class="alert" id="alertMessage"></div>
+
+    <!-- Загрузка файла -->
+    <div class="card">
+        <h2><i class="fas fa-upload"></i> Импорт данных из Excel</h2>
+        <div class="upload-area" id="dropZone">
+            <i class="fas fa-file-excel"></i>
+            <p><strong>Перетащите файл сюда</strong> или кликните для выбора</p>
+            <p class="hint">Поддерживаются .xlsx и .xls</p>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        
+        <!-- Прогресс-бар -->
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar-wrapper">
+                <div class="fill" id="progressFill"></div>
+            </div>
+            <div class="progress-info">
+                <span class="status-text" id="statusText">Подготовка...</span>
+                <span class="counts" id="progressCounts">0 из 0</span>
+            </div>
+            <div class="log-area" id="logArea"></div>
+        </div>
+    </div>
+
+    <!-- Управление -->
+    <div class="card">
+        <h2><i class="fas fa-tools"></i> Управление</h2>
+        <div class="button-group">
+            <button class="btn btn-danger" onclick="clearDatabase()">
+                <i class="fas fa-trash"></i> Очистить БД
+            </button>
+            <button class="btn btn-success" onclick="loadUploadHistory()">
+                <i class="fas fa-history"></i> Обновить историю
+            </button>
+        </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="card">
+        <h2><i class="fas fa-chart-pie"></i> Статистика в БД</h2>
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-item">
+                <div class="number" id="totalCallsStat">-</div>
+                <div class="label">Всего вызовов</div>
+            </div>
+            <div class="stat-item">
+                <div class="number" id="totalServicesStat">-</div>
+                <div class="label">Служб</div>
+            </div>
+            <div class="stat-item">
+                <div class="number" id="totalFilesStat">-</div>
+                <div class="label">Загружено файлов</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- История загрузок -->
+    <div class="card">
+        <h2><i class="fas fa-list"></i> История загрузок</h2>
+        <div class="upload-history" id="uploadHistory">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Файл</th>
+                        <th>Город</th>
+                        <th>Импортировано</th>
+                        <th>Статус</th>
+                        <th>Дата</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="5" style="text-align:center; color:#64748b;">Нет данных</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ============================================================
+    // Загрузка статистики
+    // ============================================================
+    
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/uploads');
+            const uploads = await response.json();
+            
+            document.getElementById('totalCallsStat').textContent = 
+                uploads.reduce((sum, u) => sum + u.rows_imported, 0);
+            document.getElementById('totalFilesStat').textContent = uploads.length;
+            
+            const servicesRes = await fetch('/api/services');
+            const services = await servicesRes.json();
+            document.getElementById('totalServicesStat').textContent = services.length;
+        } catch (error) {
+            console.error('Ошибка загрузки статистики:', error);
+        }
+    }
+    
+    // ============================================================
+    // История загрузок
+    // ============================================================
+    
+    async function loadUploadHistory() {
+        try {
+            const response = await fetch('/api/uploads');
+            const uploads = await response.json();
+            
+            const tbody = document.getElementById('historyBody');
+            if (uploads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b;">Нет данных</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = uploads.map(u => `
+                <tr>
+                    <td>${u.filename}</td>
+                    <td>${u.city || '—'}</td>
+                    <td>${u.rows_imported}</td>
+                    <td><span class="badge ${u.status === 'success' ? 'green' : 'orange'}">${u.status}</span></td>
+                    <td>${new Date(u.uploaded_at).toLocaleString('ru-RU')}</td>
+                </tr>
+            `).join('');
+        } catch (error) {
+            console.error('Ошибка загрузки истории:', error);
+        }
+    }
+    
+    // ============================================================
+    // Загрузка файла с прогрессом
+    // ============================================================
+    
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressFill = document.getElementById('progressFill');
+    const statusText = document.getElementById('statusText');
+    const progressCounts = document.getElementById('progressCounts');
+    const logArea = document.getElementById('logArea');
+    const alertMessage = document.getElementById('alertMessage');
+    
+    let currentImportId = null;
+    let statusInterval = null;
+    
+    function showAlert(message, type = 'info') {
+        alertMessage.textContent = message;
+        alertMessage.className = `alert ${type} show`;
+        setTimeout(() => {
+            alertMessage.className = 'alert';
+        }, 5000);
+    }
+    
+    function addLog(message, type = 'info') {
+        logArea.style.display = 'block';
+        const entry = document.createElement('div');
+        entry.className = type;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logArea.appendChild(entry);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+    
+    function updateProgress(progress) {
+        const percent = progress.total > 0 ? (progress.processed / progress.total * 100) : 0;
+        progressFill.style.width = Math.min(percent, 100) + '%';
+        progressFill.classList.remove('indeterminate');
+        statusText.textContent = progress.message || 'Обработка...';
+        progressCounts.textContent = `${progress.processed} из ${progress.total}`;
+    }
+    
+    function checkStatus(importId) {
+        if (statusInterval) clearInterval(statusInterval);
+        
+        statusInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/upload_status/${importId}`);
+                const status = await response.json();
+                
+                updateProgress(status);
+                
+                if (status.status === 'completed') {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                    progressFill.style.width = '100%';
+                    addLog(`✅ ${status.message}`, 'success');
+                    showAlert(status.message, 'success');
+                    loadUploadHistory();
+                    loadStats();
+                    setTimeout(() => {
+                        progressContainer.classList.remove('show');
+                    }, 3000);
+                } else if (status.status === 'error') {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                    addLog(`❌ ${status.message}`, 'error');
+                    showAlert(`Ошибка: ${status.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка получения статуса:', error);
+            }
+        }, 1000);
+    }
+    
+    dropZone.addEventListener('click', () => fileInput.click());
+    
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            uploadFile(e.dataTransfer.files[0]);
+        }
+    });
+    
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+            uploadFile(fileInput.files[0]);
+        }
+    });
+    
+    async function uploadFile(file) {
+        if (!file.name.match(/\.(xlsx|xls)$/)) {
+            showAlert('Пожалуйста, загрузите файл Excel (.xlsx или .xls)', 'error');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Показываем прогресс-бар в индетерминированном режиме
+        progressContainer.classList.add('show');
+        progressFill.style.width = '30%';
+        progressFill.classList.add('indeterminate');
+        statusText.textContent = 'Загрузка файла...';
+        progressCounts.textContent = 'Подготовка...';
+        logArea.innerHTML = '';
+        logArea.style.display = 'block';
+        addLog(`Начинаем загрузку: ${file.name}`, 'info');
+        
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success && result.import_id) {
+                currentImportId = result.import_id;
+                addLog(`✅ Загрузка завершена, начинаем импорт`, 'success');
+                checkStatus(result.import_id);
+            } else {
+                throw new Error(result.error || 'Неизвестная ошибка');
+            }
+        } catch (error) {
+            progressFill.classList.remove('indeterminate');
+            progressFill.style.width = '100%';
+            progressFill.style.background = '#ef4444';
+            addLog(`❌ Ошибка: ${error.message}`, 'error');
+            showAlert(`Ошибка: ${error.message}`, 'error');
+            setTimeout(() => {
+                progressContainer.classList.remove('show');
+                progressFill.style.background = '';
+            }, 3000);
+        }
+    }
+    
+    // ============================================================
+    // Очистка БД
+    // ============================================================
+    
+    async function clearDatabase() {
+        if (!confirm('Вы уверены, что хотите удалить ВСЕ вызовы и записи об импорте? Это действие необратимо!')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/clear_db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                showAlert('База данных успешно очищена', 'success');
+                loadUploadHistory();
+                loadStats();
+            } else {
+                showAlert(`Ошибка: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            showAlert(`Ошибка: ${error.message}`, 'error');
+        }
+    }
+    
+    // ============================================================
+    // Запуск
+    // ============================================================
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        loadStats();
+        loadUploadHistory();
+    });
+</script>
+
+</body>
+</html>
