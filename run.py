@@ -5,14 +5,11 @@ from app.data_generator import generate_historical_data
 app = create_app()
 
 with app.app_context():
-    # Создаем все таблицы
     db.create_all()
     print("✅ Таблицы созданы")
     
-    # Инициализируем пороговые значения
     init_thresholds()
     
-    # Генерируем исторические данные, если их нет
     from app.models import Call
     if Call.query.count() == 0:
         print("📊 Генерация исторических данных...")

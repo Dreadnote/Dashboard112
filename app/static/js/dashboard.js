@@ -1,57 +1,83 @@
 // ============================================================
-// app/static/js/dashboard.js
+// dashboard.js — ПОЛНАЯ ВЕРСИЯ
 // ============================================================
 
-const DEFAULT_CITY = 'Оренбург';
-const ORSK_CENTER = [51.2045, 58.5669];
-const ORENBURG_CENTER = [51.7682, 55.0970];
+// 1. СОСТОЯНИЕ
+// ============================================================
 
-function getCityCenter(city) {
-    if (city === 'Орск') return ORSK_CENTER;
-    return ORENBURG_CENTER;
+const state = {
+    city: 'Оренбург',
+    date: '',
+    startHour: 0,
+    displayHours: 24,
+    currentTime: null,
+    chart: null,
+    map: null,
+    clusterer: null,
+    mapInitialized: false,
+    addedMarkerIds: new Set(),
+    isPlaying: false,
+    playInterval: null,
+    speed: 1,
+    isEndOfDay: false,
+    availableDates: [],
+    
+    // Параметры графика
+    targetMean: 10.0,
+    confidenceInterval: 2.5,
+    upperEscalation: 20.0,
+    lowerEscalation: 2.0,
+    
+    // Данные графика
+    rawCounts: [],
+    loadFactors: [],
+    timestamps: [],
+    chartLines: {},
+    markers: [],
+    
+    isInitialized: false
+};
+
+// ============================================================
+// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ============================================================
+
+function getDisplayHours() {
+    const select = document.getElementById('displayHoursSelect');
+    return parseInt(select?.value || 24);
 }
 
-let map = null;
-let clusterer = null;
-let clusterEnabled = true;
-let mapFullscreen = false;
-let mapInitialized = false;
+function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('ru-RU', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+    });
+}
 
-let addedMarkerIds = new Set();
-let allPlacemarks = [];
-
-let scenarioData = null;
-let isPlaying = false;
-let playInterval = null;
-let speed = 1;
-let chart = null;
-
-let currentCity = DEFAULT_CITY;
-let currentDate = '';
-let timeRangeHours = 24;
-let currentTimeRange = '24h';
-let availableDates = [];
-let calendarDate = new Date();
+function getCityCenter(city) {
+    return city === 'Орск' ? [51.2045, 58.5669] : [51.7682, 55.0970];
+}
 
 // ============================================================
-// 1. API
+// 3. ЗАГРУЗКА ГОРОДОВ И ДАТ
 // ============================================================
 
-async function loadAvailableCities() {
+async function loadCities() {
     try {
         const response = await fetch('/api/cities');
         const cities = await response.json();
-        const citySelect = document.getElementById('citySelect');
-        citySelect.innerHTML = '';
-        if (!cities || cities.length === 0) {
-            citySelect.innerHTML = '<option value="Оренбург">Оренбург</option>';
-            return ['Оренбург'];
-        }
+        const select = document.getElementById('citySelect');
+        if (!select) return cities;
+        
+        select.innerHTML = '';
         cities.forEach(city => {
-            const option = document.createElement('option');
-            option.value = city;
-            option.textContent = city;
-            citySelect.appendChild(option);
+            const opt = document.createElement('option');
+            opt.value = city;
+            opt.textContent = city;
+            select.appendChild(opt);
         });
         return cities;
     } catch (error) {
@@ -60,115 +86,101 @@ async function loadAvailableCities() {
     }
 }
 
-async function loadAvailableDates(city) {
+async function loadDates(city) {
     try {
         const response = await fetch(`/api/dates?city=${encodeURIComponent(city)}`);
         const dates = await response.json();
-        availableDates = dates || [];
+        state.availableDates = dates || [];
+        
         dates.sort((a, b) => new Date(a) - new Date(b));
         
-        const dateSelect = document.getElementById('dateSelect');
+        // Создаём скрытый select для хранения дат
+        let dateSelect = document.getElementById('dateSelect');
         if (!dateSelect) {
-            const hiddenSelect = document.createElement('select');
-            hiddenSelect.id = 'dateSelect';
-            hiddenSelect.style.display = 'none';
-            document.body.appendChild(hiddenSelect);
+            dateSelect = document.createElement('select');
+            dateSelect.id = 'dateSelect';
+            dateSelect.style.display = 'none';
+            document.body.appendChild(dateSelect);
         }
-        const select = document.getElementById('dateSelect');
-        select.innerHTML = '';
+        dateSelect.innerHTML = '';
+        
         if (!dates || dates.length === 0) {
-            select.innerHTML = '<option value="">Нет данных</option>';
-            return null;
+            dateSelect.innerHTML = '<option value="">Нет данных</option>';
+            document.getElementById('selectedDateDisplay').textContent = 'Нет данных';
+            return [];
         }
+        
         dates.forEach(date => {
             const option = document.createElement('option');
             option.value = date;
             option.textContent = formatDate(date);
-            select.appendChild(option);
+            dateSelect.appendChild(option);
         });
-        currentDate = dates[dates.length - 1];
-        select.value = currentDate;
-        document.getElementById('selectedDateDisplay').textContent = formatDate(currentDate);
+        
+        state.date = dates[dates.length - 1];
+        dateSelect.value = state.date;
+        document.getElementById('selectedDateDisplay').textContent = formatDate(state.date);
+        
         renderCalendar();
-        return currentDate;
+        return dates;
     } catch (error) {
         console.error('Ошибка загрузки дат:', error);
-        return null;
-    }
-}
-
-function formatDate(dateStr) {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-async function loadScenarioByCity(progress = 0) {
-    const city = document.getElementById('citySelect')?.value || currentCity;
-    const dateSelect = document.getElementById('dateSelect');
-    const date = dateSelect?.value || currentDate;
-    if (!date) {
-        console.warn('Нет выбранной даты');
-        return null;
-    }
-    currentCity = city;
-    currentDate = date;
-    if (progress === 0) {
-        addedMarkerIds.clear();
-        if (clusterer) clusterer.removeAll();
-        allPlacemarks = [];
-        const center = getCityCenter(city);
-        if (map) map.setCenter(center, 13);
-    }
-    return await loadScenarioForCityDate(city, date, progress);
-}
-
-async function loadScenarioForCityDate(city, date, progress = 0) {
-    try {
-        const startDate = new Date(date);
-        const endDate = new Date(date);
-        endDate.setDate(endDate.getDate() + 1);
-        const totalMs = endDate.getTime() - startDate.getTime();
-        const currentMs = startDate.getTime() + (totalMs * progress / 100);
-        const currentTime = new Date(currentMs);
-        
-        const url = `/api/scenario_by_city?city=${encodeURIComponent(city)}&date=${date}&current_time=${currentTime.toISOString()}&time_range=${timeRangeHours}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        scenarioData = data;
-        updateDashboard(data);
-        updateTimeline(progress, currentTime);
-        updateChart(data);
-        
-        // Обновляем карту
-        addedMarkerIds.clear();
-        if (clusterer) clusterer.removeAll();
-        allPlacemarks = [];
-        const activeTypes = getActiveFilters();
-        const filteredMarkers = data.markers.filter(m => activeTypes.includes(m.type));
-        filteredMarkers.forEach(marker => {
-            const placemark = createYandexPlacemark(marker);
-            clusterer.add(placemark);
-            addedMarkerIds.add(marker.id);
-            allPlacemarks.push(placemark);
-        });
-        
-        const callsInfo = document.getElementById('callsInfo');
-        if (callsInfo) callsInfo.textContent = `Вызовов: ${data.total_calls || 0}`;
-        return data;
-    } catch (error) {
-        console.error('Ошибка загрузки сценария:', error);
-        return null;
+        return [];
     }
 }
 
 // ============================================================
-// 2. UI
+// 4. ЗАГРУЗКА ДАННЫХ ДЛЯ ГРАФИКА
+// ============================================================
+
+async function loadInitialChartData() {
+    const city = document.getElementById('citySelect')?.value || state.city;
+    const dateStr = state.date || state.availableDates[state.availableDates.length - 1];
+    const startHour = parseInt(document.getElementById('startHourSelect')?.value || 0);
+    const displayHours = getDisplayHours();
+    
+    const targetMean = parseFloat(document.getElementById('targetMeanInput')?.value) || state.targetMean;
+    const confidenceInterval = parseFloat(document.getElementById('confidenceInput')?.value) || state.confidenceInterval;
+    const upperEscalation = parseFloat(document.getElementById('upperEscalationInput')?.value) || state.upperEscalation;
+    const lowerEscalation = parseFloat(document.getElementById('lowerEscalationInput')?.value) || state.lowerEscalation;
+    
+    state.targetMean = targetMean;
+    state.confidenceInterval = confidenceInterval;
+    state.upperEscalation = upperEscalation;
+    state.lowerEscalation = lowerEscalation;
+    state.city = city;
+    state.date = dateStr;
+    state.startHour = startHour;
+    state.displayHours = displayHours;
+    
+    const url = `/api/initial_chart_data?city=${encodeURIComponent(city)}&date=${dateStr}&start_hour=${startHour}&display_hours=${displayHours}&target_mean=${targetMean}&confidence_interval=${confidenceInterval}&upper_escalation=${upperEscalation}&lower_escalation=${lowerEscalation}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    state.currentTime = data.current_time;
+    state.rawCounts = data.raw_counts;
+    state.loadFactors = data.load_factors;
+    state.timestamps = data.timestamps;
+    state.chartLines = data.chart_lines;
+    state.markers = data.markers;
+    
+    updateDashboard(data);
+    renderChart(data);
+    updateMap(data.markers);
+    updateTimeline(0);
+    updateCallsInfo(data.total_calls);
+    
+    state.isInitialized = true;
+}
+
+// ============================================================
+// 5. ОБНОВЛЕНИЕ UI
 // ============================================================
 
 function updateDashboard(data) {
-    const loadFactor = data.current_load || 1.0;
+    const loadFactor = data.load_factors?.length > 0 ? data.load_factors[data.load_factors.length - 1] : 1.0;
     const totalCalls = data.total_calls || 0;
+    
     document.getElementById('coeffDisplay').innerHTML = loadFactor.toFixed(2) + ' <span>от нормы</span>';
     document.getElementById('totalCalls').textContent = totalCalls;
     
@@ -176,13 +188,15 @@ function updateDashboard(data) {
     const statusLabel = document.getElementById('statusLabel');
     const alertBanner = document.getElementById('alertBanner');
     const alertText = document.getElementById('alertText');
+    
     statusBar.className = 'status-bar';
     alertBanner.className = 'alert-banner';
+    
     if (loadFactor >= 3.0) {
         statusBar.classList.add('critical');
         statusLabel.innerHTML = '🔴 КРИТИЧЕСКАЯ СИТУАЦИЯ!';
         alertBanner.classList.add('show');
-        alertText.textContent = '🚨 КРИТИЧЕСКОЕ ПРЕВЫШЕНИЕ! Коэффициент превышает 3.0!';
+        alertText.textContent = '🚨 КРИТИЧЕСКОЕ ПРЕВЫШЕНИЕ!';
     } else if (loadFactor >= 1.5) {
         statusBar.classList.add('danger');
         statusLabel.innerHTML = '🟠 ПРЕВЫШЕНИЕ ПОРОГА (> 1.5)';
@@ -196,11 +210,12 @@ function updateDashboard(data) {
         statusBar.classList.add('danger');
         statusLabel.innerHTML = '📵 АНОМАЛЬНОЕ ПАДЕНИЕ';
         alertBanner.classList.add('show');
-        alertText.textContent = '📵 Зафиксировано аномальное падение количества вызовов.';
+        alertText.textContent = '📵 Аномальное падение вызовов.';
     } else {
         statusLabel.innerHTML = '🟢 ШТАТНЫЙ РЕЖИМ';
         alertBanner.className = 'alert-banner';
     }
+    
     updateIncidentTable(data.incidents || {});
     updateServiceLegend(data.markers || []);
 }
@@ -235,78 +250,159 @@ function updateServiceLegend(markers) {
         'ДДС-01': '🔥 Пожарная', 'ДДС-02': '👮 Полиция', 'ДДС-03': '🚑 Скорая', 'ДДС-04': '💨 Газовая',
         'Антитеррор': '🛡️ Антитеррор', 'ЦУКС': '📡 ЦУКС', 'ЕДДС': '📞 ЕДДС', 'CONSULT': '💬 Консультация'
     };
-    container.innerHTML = '<span style="color:#94a3b8; font-size:12px;">Службы и категории:</span>';
+    container.innerHTML = '<span style="color:#94a3b8; font-size:12px;">Службы:</span>';
     services.forEach(s => {
         container.innerHTML += `<span><span class="dot" style="background:${colors[s] || '#60a5fa'};"></span>${names[s] || s}</span>`;
     });
 }
 
-function updateTimeline(progress, currentTime) {
+function updateCallsInfo(total) {
+    const el = document.getElementById('callsInfo');
+    if (el) el.textContent = `Вызовов: ${total || 0}`;
+}
+
+function updateTimeline(progress) {
     document.getElementById('progressLabel').textContent = Math.round(progress) + '%';
     document.getElementById('timelineSlider').value = progress;
-    document.getElementById('simTimeLabel').textContent = currentTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    document.getElementById('currentDateDisplay').textContent = currentTime.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-    document.getElementById('currentTimeDisplay').textContent = currentTime.toLocaleTimeString('ru-RU');
-    document.getElementById('currentDateDisplay2').textContent = currentTime.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    if (state.currentTime) {
+        const dt = new Date(state.currentTime);
+        document.getElementById('simTimeLabel').textContent = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        document.getElementById('currentDateDisplay').textContent = dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+        document.getElementById('currentTimeDisplay').textContent = dt.toLocaleTimeString('ru-RU');
+        document.getElementById('currentDateDisplay2').textContent = dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
 }
 
 // ============================================================
-// 3. ГРАФИК
+// 6. ГРАФИК
 // ============================================================
 
-function updateChart(data) {
+function renderChart(data) {
     const ctx = document.getElementById('loadChart').getContext('2d');
-    const loadFactors = data.load_factors || [];
+    if (state.chart) { state.chart.destroy(); state.chart = null; }
+    
+    const rawCounts = data.raw_counts || [];
     const timestamps = data.timestamps || [];
-    if (chart) chart.destroy();
-    if (loadFactors.length === 0) {
-        chart = new Chart(ctx, {
+    const lines = data.chart_lines || {};
+    
+    if (rawCounts.length === 0) {
+        state.chart = new Chart(ctx, {
             type: 'line',
             data: { labels: [], datasets: [{ data: [] }] },
             options: { responsive: true, maintainAspectRatio: false }
         });
         return;
     }
-    const FIXED_MAX = 5.0;
-    const FIXED_MIN = 0;
-    const rangeMap = { '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720, '90d': 2160, '365d': 8760 };
-    const maxPoints = rangeMap[currentTimeRange] || 24;
-    let startIndex = Math.max(0, loadFactors.length - maxPoints);
-    const displayData = loadFactors.slice(startIndex);
-    const displayLabels = timestamps.slice(startIndex).map(t => {
-        const date = new Date(t);
-        return date.getHours().toString().padStart(2, '0') + ':00';
+    
+    const labels = timestamps.map(t => {
+        const d = new Date(t);
+        return d.getHours().toString().padStart(2, '0') + ':00';
     });
-    const colors = displayData.map(val => {
-        if (val >= 3.0) return '#ef4444';
-        if (val >= 1.5) return '#f97316';
-        if (val >= 1.2) return '#eab308';
+    
+    const allValues = [...rawCounts, lines.upper_escalation || 0, lines.upper_confidence || 0];
+    const maxVal = Math.max(5, ...allValues) + 2;
+    
+    const datasets = [];
+    
+    // Основной график
+    const colors = rawCounts.map(val => {
+        if (val >= (lines.upper_escalation || Infinity)) return '#ef4444';
+        if (val >= (lines.upper_confidence || Infinity)) return '#f97316';
+        if (val <= (lines.lower_escalation || -Infinity)) return '#f97316';
         return '#22c55e';
     });
-    chart = new Chart(ctx, {
+    
+    datasets.push({
+        label: 'Вызовы',
+        data: rawCounts,
+        borderColor: '#60a5fa',
+        borderWidth: 3,
+        pointBackgroundColor: colors,
+        pointBorderColor: colors.map(c => c === '#22c55e' ? '#15803d' : c === '#ef4444' ? '#b91c1c' : '#c2410c'),
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 8,
+        backgroundColor: 'rgba(96, 165, 250, 0.08)',
+        tension: 0.3,
+        fill: false
+    });
+    
+    // Целевое среднее
+    if (lines.target_mean !== undefined) {
+        datasets.push({
+            label: 'Целевое среднее',
+            data: Array(rawCounts.length).fill(lines.target_mean),
+            borderColor: '#22c55e',
+            borderWidth: 2,
+            borderDash: [8, 4],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+    
+    // Верхний доверительный интервал
+    if (lines.upper_confidence !== undefined) {
+        datasets.push({
+            label: 'Верхний доверительный интервал',
+            data: Array(rawCounts.length).fill(lines.upper_confidence),
+            borderColor: 'rgba(34, 197, 94, 0.3)',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+    
+    // Нижний доверительный интервал
+    if (lines.lower_confidence !== undefined) {
+        datasets.push({
+            label: 'Нижний доверительный интервал',
+            data: Array(rawCounts.length).fill(lines.lower_confidence),
+            borderColor: 'rgba(34, 197, 94, 0.3)',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: '+1'
+        });
+    }
+    
+    // Верхняя эскалация
+    if (lines.upper_escalation !== undefined) {
+        datasets.push({
+            label: 'Верхняя эскалация',
+            data: Array(rawCounts.length).fill(lines.upper_escalation),
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            borderDash: [12, 6],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+    
+    // Нижняя эскалация
+    if (lines.lower_escalation !== undefined) {
+        datasets.push({
+            label: 'Нижняя эскалация',
+            data: Array(rawCounts.length).fill(lines.lower_escalation),
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            borderDash: [12, 6],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+    
+    state.chart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: displayLabels,
-            datasets: [{
-                label: 'Коэффициент нагрузки',
-                data: displayData,
-                borderColor: '#60a5fa',
-                borderWidth: 3,
-                pointBackgroundColor: colors,
-                pointBorderColor: colors.map(c => c === '#22c55e' ? '#15803d' : c === '#eab308' ? '#a16207' : c === '#f97316' ? '#c2410c' : '#b91c1c'),
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 7,
-                backgroundColor: 'rgba(96, 165, 250, 0.05)',
-                tension: 0.3,
-                fill: true
-            }]
-        },
+        data: { labels: labels, datasets: datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 300, easing: 'easeOutQuart' },
             plugins: {
-                legend: { display: false },
+                legend: { 
+                    labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12, padding: 8 }
+                },
                 tooltip: {
                     backgroundColor: 'rgba(10,15,26,0.9)',
                     titleColor: '#e0e0e0',
@@ -316,82 +412,84 @@ function updateChart(data) {
                     callbacks: {
                         afterBody: function(context) {
                             const val = context[0].parsed.y;
-                            if (val >= 3.0) return '🚨 КРИТИЧЕСКОЕ ПРЕВЫШЕНИЕ!';
-                            if (val >= 1.5) return '⚠️ Превышение порога 1.5';
-                            if (val >= 1.2) return '⚡ Внимание, рост нагрузки';
-                            if (val < 0.2) return '📵 Аномальное падение';
+                            const line = state.chartLines;
+                            if (val >= line.upper_escalation) return '🚨 КРИТИЧЕСКОЕ ПРЕВЫШЕНИЕ!';
+                            if (val >= line.upper_confidence) return '⚠️ Превышение доверительного интервала';
+                            if (val <= line.lower_escalation) return '📵 Аномальное падение';
                             return '✅ В пределах нормы';
                         }
                     }
-                },
-                zoom: {
-                    pan: { enabled: true, mode: 'x', rangeMin: { x: 0, y: FIXED_MIN }, rangeMax: { x: loadFactors.length, y: FIXED_MAX } },
-                    zoom: { enabled: true, mode: 'x', wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, rangeMin: { x: 3, y: FIXED_MIN } }
                 }
             },
             scales: {
-                y: { min: FIXED_MIN, max: FIXED_MAX, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', stepSize: 0.5 } },
-                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8', maxTicksLimit: 12 } }
+                y: {
+                    min: 0,
+                    max: maxVal,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#94a3b8', stepSize: Math.ceil(maxVal / 10) },
+                    title: { display: true, text: 'Вызовы в час', color: '#94a3b8' }
+                },
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8', maxTicksLimit: 12 }
+                }
             }
         }
     });
 }
 
-function setChartRange(range) {
-    currentTimeRange = range;
-    document.querySelectorAll('.chart-range-btn').forEach(btn => {
-        btn.style.borderColor = '#2a3a4a';
-        btn.style.color = '#c0d0e0';
-        if (btn.dataset.range === range) {
-            btn.style.borderColor = '#60a5fa';
-            btn.style.color = '#60a5fa';
-        }
-    });
-    if (scenarioData) updateChart(scenarioData);
-}
-
-function setTimeRange(hours) {
-    timeRangeHours = hours;
-    document.querySelectorAll('.time-range-btn').forEach(btn => {
-        btn.style.borderColor = '#2a3a4a';
-        btn.style.color = '#c0d0e0';
-        if (parseInt(btn.dataset.hours) === hours) {
-            btn.style.borderColor = '#60a5fa';
-            btn.style.color = '#60a5fa';
-        }
-    });
-    // Перезагружаем карту с новой длительностью
-    const city = document.getElementById('citySelect')?.value || currentCity;
-    const dateSelect = document.getElementById('dateSelect');
-    const date = dateSelect?.value || currentDate;
-    if (date) {
-        const progress = parseFloat(document.getElementById('timelineSlider')?.value || 0);
-        loadScenarioForCityDate(city, date, progress);
+function addPointToChart(timestamp, rawCount) {
+    if (!state.chart) return;
+    
+    const label = new Date(timestamp).getHours().toString().padStart(2, '0') + ':00';
+    const lines = state.chartLines;
+    
+    state.chart.data.labels.push(label);
+    state.chart.data.datasets[0].data.push(rawCount);
+    
+    const totalPoints = state.chart.data.labels.length;
+    const maxPoints = state.displayHours;
+    
+    if (totalPoints > maxPoints) {
+        state.chart.data.labels.shift();
+        state.chart.data.datasets.forEach(ds => {
+            if (ds.data.length > maxPoints) {
+                ds.data.shift();
+            }
+        });
     }
+    
+    const allData = state.chart.data.datasets[0].data;
+    const maxVal = Math.max(5, ...allData, lines.upper_escalation || 0, lines.upper_confidence || 0) + 2;
+    state.chart.options.scales.y.max = maxVal;
+    state.chart.update();
 }
 
 // ============================================================
-// 4. КАРТА
+// 7. КАРТА (Яндекс.Карты)
 // ============================================================
 
 function initYandexMap() {
-    if (mapInitialized) return;
+    if (state.mapInitialized) return;
+    
     ymaps.ready(function() {
-        map = new ymaps.Map('map', {
-            center: ORENBURG_CENTER,
+        state.map = new ymaps.Map('map', {
+            center: [51.7682, 55.0970],
             zoom: 12,
             controls: ['zoomControl']
         });
-        map.options.set('preset', 'dark');
-        clusterer = new ymaps.Clusterer({
+        state.map.options.set('preset', 'dark');
+        
+        state.clusterer = new ymaps.Clusterer({
             gridSize: 64,
             clusterIconLayout: 'default#pieChart',
             clusterIconColors: ['#22c55e', '#eab308', '#f97316', '#ef4444'],
             clusterIconPieValues: [10, 20, 50],
             clusterIconPieRadius: 20
         });
-        map.geoObjects.add(clusterer);
-        mapInitialized = true;
+        state.map.geoObjects.add(state.clusterer);
+        state.mapInitialized = true;
+        
         initializeDashboard();
     });
 }
@@ -402,14 +500,9 @@ function createYandexPlacemark(marker) {
     const description = marker.description || marker.type || 'Вызов';
     
     const serviceNames = {
-        'ДДС-01': 'Пожарная служба',
-        'ДДС-02': 'Полиция',
-        'ДДС-03': 'Скорая помощь',
-        'ДДС-04': 'Газовая служба',
-        'Антитеррор': 'Антитеррор',
-        'ЦУКС': 'ЦУКС',
-        'ЕДДС': 'ЕДДС',
-        'CONSULT': 'Консультация'
+        'ДДС-01': 'Пожарная служба', 'ДДС-02': 'Полиция', 'ДДС-03': 'Скорая помощь',
+        'ДДС-04': 'Газовая служба', 'Антитеррор': 'Антитеррор', 'ЦУКС': 'ЦУКС',
+        'ЕДДС': 'ЕДДС', 'CONSULT': 'Консультация'
     };
     
     const servicesList = (marker.services || []).map(s => serviceNames[s] || s).join(', ') || 'Не указаны';
@@ -434,9 +527,7 @@ function createYandexPlacemark(marker) {
                         <div><strong>📍 Адрес:</strong> ${marker.address || 'Не указан'}</div>
                         <div><strong>🕐 Время:</strong> ${timeStr}</div>
                         <div><strong>🛠 Службы:</strong> ${servicesList}</div>
-                        <div style="font-size: 11px; color: #999; margin-top: 4px;">
-                            📍 ${marker.lat.toFixed(5)}, ${marker.lng.toFixed(5)}
-                        </div>
+                        <div style="font-size: 11px; color: #999; margin-top: 4px;">📍 ${marker.lat.toFixed(5)}, ${marker.lng.toFixed(5)}</div>
                     </div>
                 </div>
             `,
@@ -456,11 +547,11 @@ function createYandexPlacemark(marker) {
             iconAnimation: true,
             hasBalloon: true,
             balloonMaxWidth: 400,
-            balloonPanelMaxMapArea: 0
+            balloonPanelMaxMapArea: 0,
+            openBalloonOnClick: true
         }
     );
     
-    // Принудительный обработчик клика
     placemark.events.add('click', function(e) {
         this.balloon.open();
     });
@@ -468,32 +559,71 @@ function createYandexPlacemark(marker) {
     return placemark;
 }
 
-function updateMapIncremental(markers) {
-    if (!mapInitialized || !clusterer) return;
-    const activeTypes = getActiveFilters();
-    const filteredMarkers = markers.filter(m => activeTypes.includes(m.type));
-    const newMarkers = filteredMarkers.filter(m => !addedMarkerIds.has(m.id));
-    if (newMarkers.length === 0) return;
-    newMarkers.forEach(marker => {
+function updateMap(markers) {
+    if (!state.mapInitialized || !state.clusterer) return;
+    state.clusterer.removeAll();
+    state.addedMarkerIds.clear();
+    markers.forEach(marker => {
         const placemark = createYandexPlacemark(marker);
-        clusterer.add(placemark);
-        addedMarkerIds.add(marker.id);
-        allPlacemarks.push(placemark);
+        state.clusterer.add(placemark);
+        state.addedMarkerIds.add(marker.id);
     });
-    if (newMarkers.length > 0 && filteredMarkers.length === newMarkers.length) {
-        const coords = filteredMarkers.map(m => [m.lat, m.lng]);
-        if (coords.length > 1) map.setBounds(coords, { checkZoomRange: true, zoomMargin: 40 });
+    if (markers.length > 0) {
+        const coords = markers.map(m => [m.lat, m.lng]);
+        if (coords.length > 1) {
+            state.map.setBounds(coords, { checkZoomRange: true, zoomMargin: 40 });
+        }
     }
 }
 
+function addMarkersToMap(newMarkers) {
+    if (!state.mapInitialized || !state.clusterer) return;
+    const filtered = newMarkers.filter(m => !state.addedMarkerIds.has(m.id));
+    filtered.forEach(marker => {
+        const placemark = createYandexPlacemark(marker);
+        state.clusterer.add(placemark);
+        state.addedMarkerIds.add(marker.id);
+    });
+}
+
 // ============================================================
-// 5. УПРАВЛЕНИЕ
+// 8. СИМУЛЯЦИЯ
 // ============================================================
 
+async function nextHour() {
+    if (state.isEndOfDay) return;
+    
+    const url = `/api/next_hour_data?city=${encodeURIComponent(state.city)}&current_time=${state.currentTime}&target_mean=${state.targetMean}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.is_end_of_day) {
+        state.isEndOfDay = true;
+        stopPlayback();
+        document.getElementById('playBtn').innerHTML = '<i class="fas fa-stop"></i> Завершено';
+        return;
+    }
+    
+    state.currentTime = data.timestamp;
+    state.markers = [...state.markers, ...data.new_calls];
+    
+    addPointToChart(data.timestamp, data.raw_count);
+    addMarkersToMap(data.new_calls);
+    
+    updateCallsInfo(state.markers.length);
+    updateTimeline(0);
+}
+
 function togglePlay() {
-    isPlaying = !isPlaying;
+    if (state.isEndOfDay) {
+        resetScenario();
+        return;
+    }
+    
+    state.isPlaying = !state.isPlaying;
     const btn = document.getElementById('playBtn');
-    if (isPlaying) {
+    
+    if (state.isPlaying) {
         btn.innerHTML = '<i class="fas fa-pause"></i> Пауза';
         btn.classList.add('active');
         startPlayback();
@@ -505,137 +635,52 @@ function togglePlay() {
 }
 
 function startPlayback() {
-    if (playInterval) clearInterval(playInterval);
-    const step = 0.3 * speed;
-    playInterval = setInterval(() => {
-        const slider = document.getElementById('timelineSlider');
-        let value = parseFloat(slider.value) + step;
-        if (value >= 100) { value = 100; togglePlay(); }
-        slider.value = value;
-        onSliderChange(value);
-    }, 100);
+    if (state.playInterval) clearInterval(state.playInterval);
+    const step = 800 / state.speed;
+    state.playInterval = setInterval(() => {
+        nextHour();
+    }, step);
 }
 
 function stopPlayback() {
-    if (playInterval) { clearInterval(playInterval); playInterval = null; }
+    if (state.playInterval) {
+        clearInterval(state.playInterval);
+        state.playInterval = null;
+    }
 }
 
 function resetScenario() {
     stopPlayback();
-    isPlaying = false;
+    state.isPlaying = false;
+    state.isEndOfDay = false;
     document.getElementById('playBtn').innerHTML = '<i class="fas fa-play"></i> Воспроизвести';
     document.getElementById('playBtn').classList.remove('active');
-    document.getElementById('timelineSlider').value = 0;
-    addedMarkerIds.clear();
-    if (clusterer) clusterer.removeAll();
-    allPlacemarks = [];
-    onSliderChange(0);
+    loadInitialChartData();
 }
 
 function speedUp() {
     const speeds = [0.5, 1, 2, 4, 8];
-    let index = speeds.indexOf(speed);
+    let index = speeds.indexOf(state.speed);
     index = (index + 1) % speeds.length;
-    speed = speeds[index];
-    document.getElementById('speedLabel').textContent = speed + 'x';
-    if (isPlaying) { stopPlayback(); startPlayback(); }
-}
-
-function onSliderChange(value) {
-    const progress = parseFloat(value);
-    loadScenarioByCity(progress);
-}
-
-function getActiveFilters() {
-    const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
-    return Array.from(checkboxes).map(cb => cb.value);
-}
-
-function applyFilters() {
-    const activeTypes = getActiveFilters();
-    if (!scenarioData) return;
-    const allMarkers = scenarioData.markers || [];
-    const filteredMarkers = allMarkers.filter(m => activeTypes.includes(m.type));
-    if (clusterer) clusterer.removeAll();
-    addedMarkerIds.clear();
-    allPlacemarks = [];
-    filteredMarkers.forEach(marker => {
-        const placemark = createYandexPlacemark(marker);
-        clusterer.add(placemark);
-        addedMarkerIds.add(marker.id);
-        allPlacemarks.push(placemark);
-    });
-    const filteredIncidents = {};
-    filteredMarkers.forEach(m => { filteredIncidents[m.type] = (filteredIncidents[m.type] || 0) + 1; });
-    updateIncidentTable(filteredIncidents);
-    document.getElementById('totalCalls').textContent = filteredMarkers.length;
-}
-
-function toggleCluster() {
-    clusterEnabled = !clusterEnabled;
-    const btn = document.getElementById('clusterToggle');
-    btn.classList.toggle('active');
-    const allMarkers = scenarioData?.markers || [];
-    const activeTypes = getActiveFilters();
-    const filteredMarkers = allMarkers.filter(m => activeTypes.includes(m.type));
-    if (clusterEnabled) {
-        btn.innerHTML = '<i class="fas fa-layer-group"></i> Кластеры';
-        btn.style.borderColor = '#60a5fa';
-        if (clusterer) map.geoObjects.remove(clusterer);
-        clusterer = new ymaps.Clusterer({
-            gridSize: 64,
-            clusterIconLayout: 'default#pieChart',
-            clusterIconColors: ['#22c55e', '#eab308', '#f97316', '#ef4444'],
-            clusterIconPieValues: [10, 20, 50],
-            clusterIconPieRadius: 20
-        });
-        map.geoObjects.add(clusterer);
-        addedMarkerIds.clear();
-        filteredMarkers.forEach(m => {
-            const placemark = createYandexPlacemark(m);
-            clusterer.add(placemark);
-            addedMarkerIds.add(m.id);
-            allPlacemarks.push(placemark);
-        });
-    } else {
-        btn.innerHTML = '<i class="fas fa-th"></i> Точки';
-        btn.style.borderColor = '#2a3a4a';
-        if (clusterer) map.geoObjects.remove(clusterer);
-        const collection = new ymaps.GeoObjectCollection();
-        addedMarkerIds.clear();
-        filteredMarkers.forEach(m => {
-            const placemark = createYandexPlacemark(m);
-            collection.add(placemark);
-            addedMarkerIds.add(m.id);
-        });
-        map.geoObjects.add(collection);
-        map.currentCollection = collection;
-    }
-}
-
-function toggleMapFullscreen() {
-    mapFullscreen = !mapFullscreen;
-    const mapElement = document.getElementById('map');
-    const btn = document.querySelector('[onclick="toggleMapFullscreen()"]');
-    if (mapFullscreen) {
-        mapElement.classList.add('fullscreen');
-        btn.innerHTML = '<i class="fas fa-compress"></i> Свернуть';
-        setTimeout(() => { if (map) map.container.fitToViewport(); }, 400);
-    } else {
-        mapElement.classList.remove('fullscreen');
-        btn.innerHTML = '<i class="fas fa-expand"></i> Развернуть';
-        setTimeout(() => { if (map) map.container.fitToViewport(); }, 400);
-    }
+    state.speed = speeds[index];
+    document.getElementById('speedLabel').textContent = state.speed + 'x';
+    if (state.isPlaying) { stopPlayback(); startPlayback(); }
 }
 
 // ============================================================
-// 6. КАЛЕНДАРЬ
+// 9. КАЛЕНДАРЬ
 // ============================================================
+
+let calendarDate = new Date();
 
 function toggleCalendar() {
     const popup = document.getElementById('calendarPopup');
-    popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
-    if (popup.style.display === 'block') renderCalendar();
+    if (popup.style.display === 'none' || popup.style.display === '') {
+        popup.style.display = 'block';
+        renderCalendar();
+    } else {
+        popup.style.display = 'none';
+    }
 }
 
 function renderCalendar() {
@@ -643,42 +688,45 @@ function renderCalendar() {
     const month = calendarDate.getMonth();
     
     document.getElementById('calendarYearDisplay').textContent = year;
-    document.getElementById('calendarMonthDisplay').textContent = 
-        new Date(year, month).toLocaleString('ru-RU', { month: 'long' });
-    document.getElementById('calendarMonthYear').textContent = 
-        new Date(year, month).toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 
+                        'Июль', 'Август', 'Сентябрь', 'Окторябрь', 'Ноябрь', 'Декабрь'];
+    document.getElementById('calendarMonthDisplay').textContent = monthNames[month];
     
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysContainer = document.getElementById('calendarDays');
-    const availableSet = new Set(availableDates);
+    const availableSet = new Set(state.availableDates);
     const dateSelect = document.getElementById('dateSelect');
+    
     daysContainer.innerHTML = '';
     const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+    
     for (let i = 0; i < startOffset; i++) {
         const empty = document.createElement('div');
-        empty.style.cssText = 'text-align:center; padding:6px; color:#64748b;';
+        empty.style.cssText = 'text-align:center; padding:4px; color:#64748b;';
         daysContainer.appendChild(empty);
     }
+    
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const isAvailable = availableSet.has(dateStr);
         const isToday = dateStr === new Date().toISOString().split('T')[0];
         const isSelected = dateStr === dateSelect?.value;
+        
         const cell = document.createElement('div');
         cell.textContent = day;
         cell.style.cssText = `
-            text-align: center; padding: 6px; border-radius: 6px;
+            text-align: center; padding: 6px 2px; border-radius: 6px;
             cursor: ${isAvailable ? 'pointer' : 'default'};
             color: ${isAvailable ? '#e0e0e0' : '#64748b'};
             background: ${isSelected ? '#1a3a5a' : isToday ? '#1a2a3a' : 'transparent'};
-            border: ${isToday ? '1px solid #60a5fa' : 'none'};
-            transition: all 0.2s ease;
+            border: ${isToday ? '1px solid #60a5fa' : '1px solid transparent'};
+            font-size: 14px; transition: all 0.2s ease;
         `;
         if (isAvailable) {
             cell.onclick = () => selectDate(dateStr);
-            cell.onmouseover = () => { cell.style.background = '#1a2a3a'; };
-            cell.onmouseout = () => { cell.style.background = isSelected ? '#1a3a5a' : isToday ? '#1a2a3a' : 'transparent'; };
+            cell.onmouseover = () => { if (!isSelected) cell.style.background = '#1a2a3a'; };
+            cell.onmouseout = () => { if (!isSelected) cell.style.background = isToday ? '#1a2a3a' : 'transparent'; };
         }
         daysContainer.appendChild(cell);
     }
@@ -711,8 +759,8 @@ function selectDate(dateStr) {
     }
     document.getElementById('calendarPopup').style.display = 'none';
     document.getElementById('selectedDateDisplay').textContent = formatDate(dateStr);
-    currentDate = dateStr;
-    loadScenarioByCity(0);
+    state.date = dateStr;
+    resetScenario();
 }
 
 function changeDay(delta) {
@@ -724,26 +772,132 @@ function changeDay(delta) {
     const newIndex = Math.max(0, Math.min(options.length - 1, currentIndex + delta));
     if (newIndex === currentIndex) return;
     dateSelect.selectedIndex = newIndex;
-    const newDate = dateSelect.value;
-    document.getElementById('selectedDateDisplay').textContent = formatDate(newDate);
-    currentDate = newDate;
-    loadScenarioByCity(0);
+    state.date = dateSelect.value;
+    document.getElementById('selectedDateDisplay').textContent = formatDate(state.date);
+    resetScenario();
 }
 
 // ============================================================
-// 7. ИНИЦИАЛИЗАЦИЯ
+// 10. ФИЛЬТРЫ
+// ============================================================
+
+function getActiveFilters() {
+    const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+function applyFilters() {
+    const activeTypes = getActiveFilters();
+    if (!state.markers) return;
+    const filteredMarkers = state.markers.filter(m => activeTypes.includes(m.type));
+    if (state.clusterer) state.clusterer.removeAll();
+    state.addedMarkerIds.clear();
+    filteredMarkers.forEach(marker => {
+        const placemark = createYandexPlacemark(marker);
+        state.clusterer.add(placemark);
+        state.addedMarkerIds.add(marker.id);
+    });
+    const incidents = {};
+    filteredMarkers.forEach(m => { incidents[m.type] = (incidents[m.type] || 0) + 1; });
+    updateIncidentTable(incidents);
+    document.getElementById('totalCalls').textContent = filteredMarkers.length;
+}
+
+// ============================================================
+// 11. КЛАСТЕРЫ / ТОЧКИ
+// ============================================================
+
+function toggleCluster() {
+    const btn = document.getElementById('clusterToggle');
+    const isCluster = btn.classList.toggle('active');
+    if (!state.clusterer) return;
+    
+    const markers = state.markers || [];
+    const activeTypes = getActiveFilters();
+    const filteredMarkers = markers.filter(m => activeTypes.includes(m.type));
+    
+    if (isCluster) {
+        btn.innerHTML = '<i class="fas fa-layer-group"></i> Кластеры';
+        btn.style.borderColor = '#60a5fa';
+        state.map.geoObjects.remove(state.clusterer);
+        state.clusterer = new ymaps.Clusterer({
+            gridSize: 64,
+            clusterIconLayout: 'default#pieChart',
+            clusterIconColors: ['#22c55e', '#eab308', '#f97316', '#ef4444'],
+            clusterIconPieValues: [10, 20, 50],
+            clusterIconPieRadius: 20
+        });
+        state.map.geoObjects.add(state.clusterer);
+        state.addedMarkerIds.clear();
+        filteredMarkers.forEach(m => {
+            const placemark = createYandexPlacemark(m);
+            state.clusterer.add(placemark);
+            state.addedMarkerIds.add(m.id);
+        });
+    } else {
+        btn.innerHTML = '<i class="fas fa-th"></i> Точки';
+        btn.style.borderColor = '#2a3a4a';
+        state.map.geoObjects.remove(state.clusterer);
+        const collection = new ymaps.GeoObjectCollection();
+        state.addedMarkerIds.clear();
+        filteredMarkers.forEach(m => {
+            const placemark = createYandexPlacemark(m);
+            collection.add(placemark);
+            state.addedMarkerIds.add(m.id);
+        });
+        state.map.geoObjects.add(collection);
+        state.map.currentCollection = collection;
+    }
+}
+
+function toggleMapFullscreen() {
+    const mapElement = document.getElementById('map');
+    const btn = document.querySelector('[onclick="toggleMapFullscreen()"]');
+    const isFullscreen = mapElement.classList.toggle('fullscreen');
+    btn.innerHTML = isFullscreen ? '<i class="fas fa-compress"></i> Свернуть' : '<i class="fas fa-expand"></i> Развернуть';
+    setTimeout(() => { if (state.map) state.map.container.fitToViewport(); }, 400);
+}
+
+// ============================================================
+// 12. ПРИМЕНЕНИЕ ПАРАМЕТРОВ
+// ============================================================
+
+function applyChartParams() {
+    loadInitialChartData();
+}
+
+// ============================================================
+// 13. ИНИЦИАЛИЗАЦИЯ ДАШБОРДА
 // ============================================================
 
 async function initializeDashboard() {
     try {
-        const cities = await loadAvailableCities();
-        const firstCity = cities.length > 0 ? cities[0] : DEFAULT_CITY;
-        await loadAvailableDates(firstCity);
-        await loadScenarioByCity(0);
+        console.log('🔄 Инициализация дашборда...');
+        const cities = await loadCities();
+        const firstCity = cities.length > 0 ? cities[0] : 'Оренбург';
+        
+        const citySelect = document.getElementById('citySelect');
+        if (citySelect) citySelect.value = firstCity;
+        state.city = firstCity;
+        
+        await loadDates(firstCity);
+        
+        if (state.availableDates.length > 0) {
+            state.date = state.availableDates[state.availableDates.length - 1];
+            const dateSelect = document.getElementById('dateSelect');
+            if (dateSelect) dateSelect.value = state.date;
+            document.getElementById('selectedDateDisplay').textContent = formatDate(state.date);
+            await loadInitialChartData();
+        }
+        console.log('✅ Инициализация завершена');
     } catch (error) {
-        console.error('Ошибка инициализации:', error);
+        console.error('❌ Ошибка инициализации:', error);
     }
 }
+
+// ============================================================
+// 14. ОБРАБОТЧИКИ СОБЫТИЙ
+// ============================================================
 
 document.addEventListener('DOMContentLoaded', function() {
     initYandexMap();
@@ -752,6 +906,34 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('change', function(e) {
     if (e.target && e.target.id === 'citySelect') {
         const city = e.target.value;
-        loadAvailableDates(city).then(() => loadScenarioByCity(0));
+        state.city = city;
+        loadDates(city).then(() => {
+            if (state.availableDates.length > 0) {
+                state.date = state.availableDates[state.availableDates.length - 1];
+                resetScenario();
+            }
+        });
     }
 });
+
+// ============================================================
+// 15. ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ HTML
+// ============================================================
+
+window.togglePlay = togglePlay;
+window.resetScenario = resetScenario;
+window.speedUp = speedUp;
+window.applyChartParams = applyChartParams;
+window.loadInitialChartData = loadInitialChartData;
+window.toggleCalendar = toggleCalendar;
+window.changeMonth = changeMonth;
+window.changeYear = changeYear;
+window.selectDate = selectDate;
+window.changeDay = changeDay;
+window.applyFilters = applyFilters;
+window.toggleCluster = toggleCluster;
+window.toggleMapFullscreen = toggleMapFullscreen;
+window.onSliderChange = function(value) {
+    // Пока просто перезагружаем данные
+    loadInitialChartData();
+};

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Мониторинг нагрузки Системы-112 — Исторический сценарий</title>
+  <title>Мониторинг нагрузки Системы-112</title>
   
   <!-- Подключаем библиотеки -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <!-- Вместо Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   
   <!-- Яндекс.Карты -->
@@ -71,7 +71,7 @@
     }
     .card h3 i { margin-right: 10px; }
     
-    .chart-wrapper { position: relative; height: 280px; }
+    .chart-wrapper { position: relative; height: 320px; }
     
     /* Таймлайн */
     .timeline-section {
@@ -161,7 +161,7 @@
       background: #0a0f1a;
     }
     #map { 
-      height: 360px; 
+      height: 400px; 
       width: 100%;
       background: #0a0f1a;
       transition: height 0.4s ease;
@@ -240,6 +240,33 @@
       display: inline-block;
     }
     
+    /* Стили для контролов */
+    .control-input {
+      background: #1a2533;
+      border: 1px solid #2a3a4a;
+      color: #e0e0e0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      width: 100%;
+    }
+    .control-input:focus {
+      outline: none;
+      border-color: #60a5fa;
+    }
+    .control-label {
+      color: #94a3b8;
+      font-size: 13px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    
+    .params-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 15px;
+    }
+    
     @media (max-width: 900px) {
       .grid-main { grid-template-columns: 1fr; }
       .status-bar { flex-direction: column; align-items: stretch; text-align: center; }
@@ -285,6 +312,7 @@
   <!-- ====== ВЫБОР ГОРОДА И ДАТЫ ====== -->
   <div class="card" style="margin-bottom:20px; padding:15px 20px;">
     <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
+      <!-- Город -->
       <div style="display:flex; align-items:center; gap:10px;">
         <label style="color:#94a3b8; font-size:14px;">🏙️ Город:</label>
         <select id="citySelect" style="
@@ -301,7 +329,55 @@
         </select>
       </div>
       
-      <!-- ====== КАЛЕНДАРЬ ====== -->
+      <!-- Час начала -->
+      <div style="display:flex; align-items:center; gap:10px;">
+        <label style="color:#94a3b8; font-size:14px;">🕐 Начало:</label>
+        <select id="startHourSelect" style="
+          background: #1a2533;
+          color: #e0e0e0;
+          border: 1px solid #2a3a4a;
+          border-radius: 8px;
+          padding: 8px 14px;
+          font-size: 14px;
+          cursor: pointer;
+        ">
+          <option value="0">00:00</option><option value="1">01:00</option>
+          <option value="2">02:00</option><option value="3">03:00</option>
+          <option value="4">04:00</option><option value="5">05:00</option>
+          <option value="6">06:00</option><option value="7">07:00</option>
+          <option value="8">08:00</option><option value="9">09:00</option>
+          <option value="10" selected>10:00</option>
+          <option value="11">11:00</option><option value="12">12:00</option>
+          <option value="13">13:00</option><option value="14">14:00</option>
+          <option value="15">15:00</option><option value="16">16:00</option>
+          <option value="17">17:00</option><option value="18">18:00</option>
+          <option value="19">19:00</option><option value="20">20:00</option>
+          <option value="21">21:00</option><option value="22">22:00</option>
+          <option value="23">23:00</option>
+        </select>
+      </div>
+      
+      <!-- Масштаб графика -->
+      <div style="display:flex; align-items:center; gap:10px;">
+        <label style="color:#94a3b8; font-size:14px;">📊 Масштаб:</label>
+        <select id="displayHoursSelect" style="
+          background: #1a2533;
+          color: #e0e0e0;
+          border: 1px solid #2a3a4a;
+          border-radius: 8px;
+          padding: 8px 14px;
+          font-size: 14px;
+          cursor: pointer;
+        ">
+          <option value="6">6 часов</option>
+          <option value="12">12 часов</option>
+          <option value="24" selected>24 часа</option>
+          <option value="48">48 часов</option>
+          <option value="168">7 дней</option>
+        </select>
+      </div>
+      
+      <!-- Календарь -->
       <div style="position:relative;">
         <button onclick="toggleCalendar()" style="
           background: #1a2533;
@@ -334,68 +410,38 @@
           width: 280px;
           box-shadow: 0 8px 30px rgba(0,0,0,0.5);
         ">
-          <!-- Заголовок календаря -->
-          <!-- Заголовок календаря с годом -->
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <button onclick="changeYear(-1)" style="
-                    background: none;
-                    border: none;
-                    color: #60a5fa;
-                    cursor: pointer;
-                    font-size: 14px;
-                ">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
-                <span style="color:#64748b; font-size:13px;" id="calendarYearDisplay">2024</span>
-                <button onclick="changeYear(1)" style="
-                    background: none;
-                    border: none;
-                    color: #60a5fa;
-                    cursor: pointer;
-                    font-size: 14px;
-                ">
-                    <i class="fas fa-chevron-right"></i>
-                </button>
-            </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <button onclick="changeMonth(-1)" style="
-              background: none;
-              border: none;
-              color: #60a5fa;
-              cursor: pointer;
-              font-size: 18px;
-            ">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <button onclick="changeYear(-1)" style="background:none; border:none; color:#60a5fa; cursor:pointer; font-size:14px; padding:0 8px;">
               <i class="fas fa-chevron-left"></i>
             </button>
-            <span style="color:#e0e0e0; font-weight:bold;" id="calendarMonthYear">Июль 2024</span>
-            <button onclick="changeMonth(1)" style="
-              background: none;
-              border: none;
-              color: #60a5fa;
-              cursor: pointer;
-              font-size: 18px;
-            ">
+            <span style="color:#64748b; font-size:13px;" id="calendarYearDisplay">2024</span>
+            <button onclick="changeYear(1)" style="background:none; border:none; color:#60a5fa; cursor:pointer; font-size:14px; padding:0 8px;">
               <i class="fas fa-chevron-right"></i>
             </button>
           </div>
-          
-          <!-- Дни недели -->
-          <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:8px;">
-            <div style="text-align:center; color:#64748b; font-size:12px;">Пн</div>
-            <div style="text-align:center; color:#64748b; font-size:12px;">Вт</div>
-            <div style="text-align:center; color:#64748b; font-size:12px;">Ср</div>
-            <div style="text-align:center; color:#64748b; font-size:12px;">Чт</div>
-            <div style="text-align:center; color:#64748b; font-size:12px;">Пт</div>
-            <div style="text-align:center; color:#64748b; font-size:12px;">Сб</div>
-            <div style="text-align:center; color:#64748b; font-size:12px;">Вс</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <button onclick="changeMonth(-1)" style="background:none; border:none; color:#60a5fa; cursor:pointer; font-size:18px; padding:0 8px;">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <span style="color:#e0e0e0; font-weight:bold; font-size:16px;" id="calendarMonthDisplay">Июль</span>
+            <button onclick="changeMonth(1)" style="background:none; border:none; color:#60a5fa; cursor:pointer; font-size:18px; padding:0 8px;">
+              <i class="fas fa-chevron-right"></i>
+            </button>
           </div>
-          
-          <!-- Дни месяца -->
+          <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:8px;">
+            <div style="text-align:center; color:#64748b; font-size:11px;">Пн</div>
+            <div style="text-align:center; color:#64748b; font-size:11px;">Вт</div>
+            <div style="text-align:center; color:#64748b; font-size:11px;">Ср</div>
+            <div style="text-align:center; color:#64748b; font-size:11px;">Чт</div>
+            <div style="text-align:center; color:#64748b; font-size:11px;">Пт</div>
+            <div style="text-align:center; color:#64748b; font-size:11px;">Сб</div>
+            <div style="text-align:center; color:#64748b; font-size:11px;">Вс</div>
+          </div>
           <div id="calendarDays" style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;"></div>
         </div>
       </div>
       
-      <button onclick="loadScenarioByCity()" style="
+      <button onclick="loadInitialChartData()" style="
         background: #1a2533;
         border: 2px solid #60a5fa;
         color: #60a5fa;
@@ -417,13 +463,16 @@
     <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
       <span style="color:#94a3b8; font-size:14px;">🔍 Фильтр по типам:</span>
       <label style="color:#e0e0e0; font-size:13px; cursor:pointer;">
-        <input type="checkbox" class="filter-checkbox" value="Пожар" checked onchange="applyFilters()"> 🔥 Пожар
+        <input type="checkbox" class="filter-checkbox" value="Пожар" checked onchange="applyFilters()"> 🔥 Пожарные
       </label>
       <label style="color:#e0e0e0; font-size:13px; cursor:pointer;">
         <input type="checkbox" class="filter-checkbox" value="ДТП" checked onchange="applyFilters()"> 🚗 ДТП
       </label>
       <label style="color:#e0e0e0; font-size:13px; cursor:pointer;">
-        <input type="checkbox" class="filter-checkbox" value="Запах газа" checked onchange="applyFilters()"> 💨 Запах газа
+        <input type="checkbox" class="filter-checkbox" value="Прочее" checked onchange="applyFilters()"> 🚑 Скорая
+      </label>
+      <label style="color:#e0e0e0; font-size:13px; cursor:pointer;">
+        <input type="checkbox" class="filter-checkbox" value="Запах газа" checked onchange="applyFilters()"> 💨 Газовая
       </label>
       <label style="color:#e0e0e0; font-size:13px; cursor:pointer;">
         <input type="checkbox" class="filter-checkbox" value="Антитеррор" checked onchange="applyFilters()"> 🛡️ Антитеррор
@@ -475,92 +524,51 @@
     <div class="service-legend" id="serviceLegend"></div>
   </div>
 
+  <!-- ====== ПАРАМЕТРЫ ГРАФИКА ====== -->
+  <div class="card" style="margin-bottom:20px;">
+    <h3><i class="fas fa-chart-bar"></i> Параметры графика</h3>
+    <div class="params-grid">
+      <div>
+        <label class="control-label">🎯 Целевое среднее</label>
+        <input type="number" id="targetMeanInput" step="0.5" value="10.0" class="control-input">
+      </div>
+      <div>
+        <label class="control-label">📊 Доверительный интервал (±)</label>
+        <input type="number" id="confidenceInput" step="0.5" value="2.5" class="control-input">
+      </div>
+      <div>
+        <label class="control-label">🔴 Верхняя эскалация</label>
+        <input type="number" id="upperEscalationInput" step="0.5" value="20.0" class="control-input">
+      </div>
+      <div>
+        <label class="control-label">🔵 Нижняя эскалация</label>
+        <input type="number" id="lowerEscalationInput" step="0.5" value="2.0" class="control-input">
+      </div>
+    </div>
+    <button onclick="applyChartParams()" style="margin-top:15px; background:#1a2533; border:2px solid #60a5fa; color:#60a5fa; padding:10px 25px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; transition:all 0.3s ease;">
+      <i class="fas fa-sync"></i> Применить параметры
+    </button>
+  </div>
+
   <!-- ====== ОСНОВНАЯ СЕТКА ====== -->
   <div class="grid-main">
     <!-- ГРАФИК -->
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
-        <h3 style="margin-bottom:0;"><i class="fas fa-chart-line"></i>Динамика нагрузки</h3>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="chart-range-btn" data-range="1h" onclick="setChartRange('1h')" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">1ч</button>
-          <button class="chart-range-btn" data-range="6h" onclick="setChartRange('6h')" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">6ч</button>
-          <button class="chart-range-btn active" data-range="24h" onclick="setChartRange('24h')" style="
-            background: #1a2533;
-            border: 1px solid #60a5fa;
-            color: #60a5fa;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">24ч</button>
-          <button class="chart-range-btn" data-range="7d" onclick="setChartRange('7d')" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">7д</button>
-          <button class="chart-range-btn" data-range="30d" onclick="setChartRange('30d')" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">30д</button>
-          <button class="chart-range-btn" data-range="90d" onclick="setChartRange('90d')" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">3м</button>
-          <button class="chart-range-btn" data-range="365d" onclick="setChartRange('365d')" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 3px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">Год</button>
-        </div>
-      </div>
+      <h3><i class="fas fa-chart-line"></i> Динамика нагрузки (вызовы/час)</h3>
       <div class="chart-wrapper">
         <canvas id="loadChart"></canvas>
       </div>
       <div class="legend-inline">
-        <span><span class="legend-dot" style="background:#22c55e;"></span> Норма (до 1.2)</span>
-        <span><span class="legend-dot" style="background:#eab308;"></span> Внимание (1.2–1.5)</span>
-        <span><span class="legend-dot" style="background:#f97316;"></span> Превышение (1.5–3.0)</span>
-        <span><span class="legend-dot" style="background:#ef4444;"></span> Критично (> 3.0)</span>
+        <span><span class="legend-dot" style="background:#60a5fa;"></span> Фактические вызовы</span>
+        <span><span class="legend-dot" style="background:#22c55e;"></span> Целевое среднее</span>
+        <span><span class="legend-dot" style="background:rgba(34,197,94,0.3);"></span> Доверительный интервал</span>
+        <span><span class="legend-dot" style="background:#ef4444;"></span> Эскалация</span>
       </div>
     </div>
 
     <!-- ТАБЛИЦА СТАТИСТИКИ -->
     <div class="card">
-      <h3><i class="fas fa-list"></i>Статистика по типам</h3>
+      <h3><i class="fas fa-list"></i> Статистика по типам</h3>
       <table>
         <thead>
           <tr><th>Тип</th><th>Кол-во</th><th>Доля</th></tr>
@@ -572,130 +580,28 @@
     </div>
   </div>
 
-  <!-- ====== НАСТРОЙКИ ВРЕМЕНИ И ПЕРЕКЛЮЧЕНИЕ ДНЕЙ ====== -->
-  <div class="card" style="margin-bottom:20px; padding:15px 20px;">
-    <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
-      <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
-        <span style="color:#94a3b8; font-size:13px;">⏱️ Длительность показа:</span>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="time-range-btn" data-hours="1" onclick="setTimeRange(1)" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">1ч</button>
-          <button class="time-range-btn" data-hours="2" onclick="setTimeRange(2)" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">2ч</button>
-          <button class="time-range-btn" data-hours="6" onclick="setTimeRange(6)" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">6ч</button>
-          <button class="time-range-btn" data-hours="12" onclick="setTimeRange(12)" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">12ч</button>
-          <button class="time-range-btn active" data-hours="24" onclick="setTimeRange(24)" style="
-            background: #1a2533;
-            border: 1px solid #60a5fa;
-            color: #60a5fa;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">24ч</button>
-          <button class="time-range-btn" data-hours="168" onclick="setTimeRange(168)" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">Нед</button>
-          <button class="time-range-btn" data-hours="0" onclick="setTimeRange(0)" style="
-            background: #1a2533;
-            border: 1px solid #2a3a4a;
-            color: #c0d0e0;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-          ">♾️</button>
-        </div>
-      </div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <button onclick="changeDay(-1)" style="
-          background: #1a2533;
-          border: 1px solid #2a3a4a;
-          color: #c0d0e0;
-          padding: 6px 14px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 13px;
-        ">
-          <i class="fas fa-chevron-left"></i> Пред.
-        </button>
-        <span style="color:#94a3b8; font-size:13px;" id="currentDateDisplay2">Выберите дату</span>
-        <button onclick="changeDay(1)" style="
-          background: #1a2533;
-          border: 1px solid #2a3a4a;
-          color: #c0d0e0;
-          padding: 6px 14px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 13px;
-        ">
-          След. <i class="fas fa-chevron-right"></i>
-        </button>
-      </div>
+  <!-- ====== ПЕРЕКЛЮЧЕНИЕ ДНЕЙ ====== -->
+  <div class="card" style="margin-bottom:20px; padding:12px 20px;">
+    <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
+      <button onclick="changeDay(-1)" style="background:#1a2533; border:1px solid #2a3a4a; color:#c0d0e0; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px;">
+        <i class="fas fa-chevron-left"></i> Пред.
+      </button>
+      <span style="color:#94a3b8; font-size:13px;" id="currentDateDisplay2">Выберите дату</span>
+      <button onclick="changeDay(1)" style="background:#1a2533; border:1px solid #2a3a4a; color:#c0d0e0; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px;">
+        След. <i class="fas fa-chevron-right"></i>
+      </button>
     </div>
   </div>
 
   <!-- ====== КАРТА ====== -->
   <div class="card" id="mapCard">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-      <h3 style="margin-bottom:0;"><i class="fas fa-map-marked-alt"></i>Геолокация вызовов</h3>
+      <h3 style="margin-bottom:0;"><i class="fas fa-map-marked-alt"></i> Геолокация вызовов</h3>
       <div style="display:flex; gap:8px;">
-        <button onclick="toggleCluster()" id="clusterToggle" class="active" style="
-          background: rgba(20,30,43,0.85);
-          border: 1px solid #2a3a4a;
-          color: #c0d0e0;
-          padding: 6px 14px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 13px;
-        ">
+        <button onclick="toggleCluster()" id="clusterToggle" class="active" style="background:rgba(20,30,43,0.85); border:1px solid #2a3a4a; color:#c0d0e0; padding:6px 14px; border-radius:8px; cursor:pointer; font-size:13px;">
           <i class="fas fa-layer-group"></i> Кластеры
         </button>
-        <button onclick="toggleMapFullscreen()" style="
-          background: rgba(20,30,43,0.85);
-          border: 1px solid #2a3a4a;
-          color: #c0d0e0;
-          padding: 6px 14px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 13px;
-        ">
+        <button onclick="toggleMapFullscreen()" style="background:rgba(20,30,43,0.85); border:1px solid #2a3a4a; color:#c0d0e0; padding:6px 14px; border-radius:8px; cursor:pointer; font-size:13px;">
           <i class="fas fa-expand"></i> Развернуть
         </button>
       </div>
